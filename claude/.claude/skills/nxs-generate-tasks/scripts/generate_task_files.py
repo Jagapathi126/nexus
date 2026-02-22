@@ -171,7 +171,10 @@ def compute_branch_name(epic_type: str, epic_number: int, epic_title: str) -> st
 def parse_valid_labels(project_root: Path) -> set[str] | None:
     """Parse valid labels from task-labels.md file.
 
-    Looks for a markdown table with label names in the first column.
+    Supports two formats:
+    1. Section headers: ## Label Name (`label-name`, #color)
+    2. Markdown table rows: | `label-name` | description |
+
     Returns None if the file doesn't exist (validation skipped).
     Returns empty set if file exists but no labels found.
     """
@@ -183,16 +186,18 @@ def parse_valid_labels(project_root: Path) -> set[str] | None:
     content = labels_path.read_text()
     labels: set[str] = set()
 
-    # Look for table rows: | label-name | description |
-    # Skip header row and separator row (|---|---|)
+    # Format 1: section headers like ## Infrastructure (`infrastructure`, #0e8a16)
+    header_pattern = r"^##\s+[\w][\w\s]*\s+\(`([a-z][a-z0-9-]*)`,\s*#[0-9a-fA-F]+"
+    # Format 2: table rows like | `label-name` | description |
     table_row_pattern = r"^\|\s*`?([a-z][a-z0-9-]*)`?\s*\|"
+    # Skip header-like entries
+    reserved = {"label", "name", "---", "-", "use", "purpose"}
 
     for line in content.split("\n"):
-        match = re.match(table_row_pattern, line, re.IGNORECASE)
+        match = re.match(header_pattern, line) or re.match(table_row_pattern, line, re.IGNORECASE)
         if match:
             label = match.group(1).lower().strip("`")
-            # Skip header-like entries
-            if label not in ("label", "name", "---", "-"):
+            if label not in reserved:
                 labels.add(label)
 
     return labels

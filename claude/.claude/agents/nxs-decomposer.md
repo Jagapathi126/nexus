@@ -22,6 +22,7 @@ When invoked from `nxs.tasks` for task decomposition, you receive:
 | `scope_context_path` | Path to `scope-context.json` with out-of-scope items | Recommended |
 | `terminology_glossary_path` | Path to `terminology-glossary.json` with canonical terms | Recommended |
 | `user_constraints_path` | Path to `user-constraints.json` with user instructions | Optional |
+| `labels_path` | Path to `task-labels.md` for valid label names | Recommended |
 
 **CRITICAL**: Read all provided context files before decomposition. These files contain essential constraints that must be respected.
 
@@ -67,6 +68,46 @@ If `user_constraints_path` is provided:
 3. **Respects user constraints**: No tasks violate explicit user constraints
 
 If a task would implement out-of-scope functionality, **DO NOT include it** in the output.
+
+## Complexity Budget & Label Loading
+
+Run this phase before decomposing — it sets constraints that govern the entire task breakdown.
+
+### Complexity Budget
+
+1. Scan the HLD for: distinct components, API endpoints, data entities, integration points, and non-trivial NFRs (security, perf, observability).
+2. Map to epic complexity and derive the task target range:
+
+   | Epic Size | Task Target | Notes |
+   |-----------|-------------|-------|
+   | S | 3–4 tasks | Prefer fewer, larger tasks |
+   | M | 4–6 tasks | Standard range |
+   | L | 6–7 tasks | Hard cap at 7 |
+   | XL | — | Should not reach decomposition; flag scope issue |
+
+3. Identify merge candidates before decomposing:
+   - Config-only changes (env vars, package.json additions, tsconfig tweaks)
+   - Single-file edits with no logic changes
+   - Export/barrel file creation (index.ts re-exports)
+
+   These **must not** become standalone tasks — fold them into the adjacent task that requires them.
+
+### Label Loading
+
+If `labels_path` is provided, read that file and extract valid label names. Use ONLY those labels in task output.
+
+If not provided, use these defaults (from `task-labels.md`):
+
+| Label | Use for |
+|-------|---------|
+| `infrastructure` | DB setup, CI/CD, build tooling, env config |
+| `backend` | API endpoints, Fastify handlers, service logic, DB queries |
+| `frontend` | React components, hooks, Lexical plugins, UI/UX |
+| `database` | Schema, indexes, PL/pgSQL functions, triggers |
+| `performance` | Index optimization, caching, query/render perf |
+| `integration` | Cross-layer wiring, persistence flows, end-to-end features |
+
+**Never invent label names.** If a task spans two areas, use two labels.
 
 ## Core Capabilities
 
@@ -130,11 +171,13 @@ Transform HLD documents into discrete, implementable tasks.
 
 **Decomposition Principles**:
 
-- Prefer smaller tasks over larger when uncertain
-- First task must create buildable/runnable skeleton
-- Each task should be independently reviewable
-- Merge barrel/export-only tasks into their source tasks
-- Merge verification-only tasks (<1hr) into implementation tasks
+- **Task budget**: Stay within the complexity-derived target range (3–7 tasks). If initial decomposition yields more tasks, merge the smallest tasks with their natural neighbours first.
+- **Minimum scope per task**: Each task must touch ≥3 files **or** contain meaningful logic changes (business rules, state transitions, API contracts, schema changes). Single-file or config-only work does not qualify as a standalone task.
+- **First task creates skeleton**: First task must produce a buildable/runnable baseline.
+- **Independent reviewability**: Each task should be mergeable without forward-referencing unimplemented code.
+- **Merge barrel/export-only tasks**: If a task's sole output is an `index.ts` re-export, fold it into the task that created the exported files.
+- **Merge verification-only tasks**: Tasks whose sole purpose is running tests created by another task (<1hr effort) must merge into their source task.
+- **Labels from file only**: All labels must come from the loaded `labels_path` or the defaults in the Complexity Budget section. Never invent labels.
 
 ### 2. Effort Estimation
 
@@ -168,6 +211,20 @@ Tasks sized **L** or larger should be decomposed further.
 
 **Output**: Size (XS/S/M/L/XL) with confidence level and key drivers
 
+### Pre-Output Self-Check
+
+Before returning the tasks JSON, validate the breakdown against these rules and fix any violations:
+
+| Check | Rule | Fix if violated |
+|-------|------|-----------------|
+| Count in range | Task count within complexity-derived target (3–7) | Merge smallest tasks with neighbours |
+| No trivially small tasks | No task with effort XS and <3 files touched | Merge into adjacent task |
+| No duplicate scope | No two tasks implement the same component, file set, or API endpoint | Merge or remove the weaker task |
+| Full HLD coverage | Every HLD phase, component, API endpoint, and data entity addressed by ≥1 task | Add coverage to nearest relevant task |
+| Labels valid | All labels exist in `labels_path` or the defaults | Correct to nearest valid label |
+
+Report any adjustments made in `scope_validation.pre_check_adjustments[]`.
+
 ### 3. Dependency Analysis
 
 Map relationships between work items.
@@ -189,10 +246,11 @@ Invoke: nxs-decomposer
 Context:
   - HLD path
   - Epic issue number
+  - Labels path: common/docs/system/delivery/task-labels.md
   - Scope context path: tasks/.scratchpad/scope-context.json
   - Terminology glossary path: tasks/.scratchpad/terminology-glossary.json
   - User constraints path: tasks/.scratchpad/user-constraints.json
-Request: Decompose into tasks respecting scope constraints
+Request: Decompose into tasks respecting scope constraints, complexity budget (4-7 tasks), and valid labels
 ```
 
 ### From nxs-architect (Estimation)

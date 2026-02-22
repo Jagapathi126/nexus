@@ -61,7 +61,22 @@ Validate task LLDs against HLD specifications.
 - Technology choices must match HLD stack
 - Flag: Technical deviations from HLD specifications
 
-### 4. Superfluous Task Detection
+### 4. Duplicate & Redundancy Detection
+
+Identify tasks that overlap in scope or implementation.
+
+**Duplicate Detection Heuristics**:
+
+| Heuristic | Pattern | Action |
+|-----------|---------|--------|
+| Same files | Two tasks list the same file in their `FILES` section | Flag as potential conflict; merge or clarify ownership |
+| Same component | Two tasks implement the same component or service | Flag; merge into one task or split responsibilities |
+| Same API endpoint | Two tasks define the same route handler | Flag as CRITICAL conflict |
+| Overlapping acceptance criteria | ≥50% of criteria text overlap between tasks | Flag as redundant; merge into the earlier task |
+
+**Detection**: Cross-reference the `FILES`, `INTERFACES`, and `ACCEPTANCE_CRITERIA` sections of each task against every other task in the set.
+
+### 5. Superfluous Task Detection
 
 Identify tasks that should be consolidated.
 
@@ -93,6 +108,7 @@ When `--remediate` mode is enabled, automatically fix AUTO-classified findings.
 | Superfluous: Barrel/export task | Merge export statements into originating task, delete file |
 | Superfluous: Verification-only  | Merge verification steps into source task, delete file     |
 | Superfluous: Effort < 1 hour    | Merge into blocked-by task (or first task it blocks)       |
+| Duplicate: Overlapping scope    | Merge weaker/later task into the earlier or more complete task; update dependencies |
 | Task numbering gaps             | Renumber tasks sequentially after merges                   |
 | Terminology drift               | Normalize to HLD canonical term across all tasks           |
 
@@ -199,13 +215,13 @@ Create internal representations for cross-referencing:
 
 Run all detection passes (limit to 50 findings, summarize overflow):
 
-A. Epic ↔ Task Coverage Gaps
-B. HLD ↔ Task Coverage Gaps
-C. Epic ↔ HLD Alignment
-D. Task ↔ Task Logical Inconsistencies
-E. HLD ↔ Task Technical Inconsistencies
-F. Superfluous Task Detection
-G. Redundancy Detection
+A. Epic ↔ Task Coverage Gaps — user stories with zero task coverage
+B. HLD ↔ Task Coverage Gaps — HLD components, API endpoints, data entities, NFRs with no task coverage
+C. Epic ↔ HLD Alignment — scope drift between product intent and technical design
+D. Task ↔ Task Logical Inconsistencies — circular dependencies, conflicting implementations, terminology drift
+E. HLD ↔ Task Technical Inconsistencies — file paths, interfaces, API routes deviating from HLD spec
+F. Superfluous Task Detection — barrel/export-only, verification-only, effort < 1hr tasks
+G. Duplicate & Redundancy Detection — same files/components/endpoints in multiple tasks, overlapping acceptance criteria
 
 ### Step 5: Classify Findings
 

@@ -153,12 +153,15 @@ After loading the HLD, validate the current epic's scope against sibling epics i
 
 ## 4. Decompose into Tasks
 
+**Pre-step — load valid labels**: Read `common/docs/system/delivery/task-labels.md` and extract the valid label names (e.g., `infrastructure`, `backend`, `frontend`, `database`, `performance`, `integration`). Pass the path to the decomposer so it selects only valid labels.
+
 Delegate HLD decomposition to `nxs-decomposer`:
 
 1. Invoke `nxs-decomposer` with:
     - HLD file path
     - Epic issue number from Step 1
-    - Request: "Decompose into implementation tasks"
+    - Labels path: `common/docs/system/delivery/task-labels.md`
+    - Request: "Decompose into implementation tasks targeting 4–7 tasks; merge trivial items; each task must touch ≥3 files or contain meaningful logic changes"
 
 2. The decomposer will return structured JSON with:
     - Sequenced tasks (≤2 days each, effort-sized)
@@ -176,11 +179,32 @@ Delegate HLD decomposition to `nxs-decomposer`:
 
 ## 5. Generate Task Files
 
-Generate task files by invoking the architect for LLD content, then running the task generation script.
+Generate and write task files **one at a time** — do not accumulate all architect responses in memory before writing. Each task is written to disk immediately after its LLD is generated.
 
-### 5.1 Generate LLD Content
+### 5.1 Prepare Common Envelope
 
-For each task from the decomposer, invoke `nxs-architect` in LLD-elaboration mode:
+Build the shared metadata JSON once and store it in memory (not on disk):
+
+```json
+{
+  "epic_number": {epic issue number from Step 1},
+  "epic_title": "{epic title from epic.md}",
+  "epic_type": "{enhancement|bug from epic.md}",
+  "output_dir": "{HLD directory}/tasks"
+}
+```
+
+Ensure the output directory exists:
+
+```bash
+mkdir -p "{HLD directory}/tasks"
+```
+
+### 5.2 Incremental Per-Task Generation Loop
+
+For each task from the decomposer output, in sequence order:
+
+**Step A — Generate LLD** (invoke `nxs-architect` in LLD-elaboration mode):
 
 ```
 Invoke: nxs-architect
@@ -193,68 +217,52 @@ Task Context:
   - Blocked by: {blocked_by}
   - Blocks: {blocks}
 Request:
-  - FILES: List files to create/modify with purposes
+  - FILES: List files to create/modify with purposes (must be ≥3 files or contain meaningful logic)
   - INTERFACES: Key TypeScript interfaces/types
   - KEY_DECISIONS: Table of decisions with rationale (extract from HLD)
   - IMPLEMENTATION_NOTES: Patterns, edge cases, testing guidance
   - ACCEPTANCE_CRITERIA: Checklist items for this specific task
 ```
 
-Store each architect response in the task object as `architect_response`.
-
-### 5.2 Prepare Input JSON
-
-Assemble all data into a JSON structure:
+**Step B — Write single-task JSON** to `/tmp/task-input-{epic_number}-{seq:02d}.json`:
 
 ```json
 {
-  "epic_number": {epic issue number from Step 1},
-  "epic_title": "{epic title from epic.md}",
-  "epic_type": "{enhancement|bug from epic.md}",
+  "epic_number": {epic_number},
+  "epic_title": "{epic_title}",
+  "epic_type": "{epic_type}",
   "output_dir": "{HLD directory}/tasks",
   "tasks": [
     {
-      "sequence": 1,
-      "title": "Task title",
-      "category": "Category",
-      "summary": "One paragraph summary",
-      "effort": "S",
-      "labels": ["frontend"],
-      "blocked_by": [],
-      "blocks": [2, 3],
-      "architect_response": "### Files\n\n- `path/to/file.ts`..."
+      "sequence": {sequence},
+      "title": "{title}",
+      "category": "{category}",
+      "summary": "{summary}",
+      "effort": "{effort}",
+      "labels": ["{label1}", "{label2}"],
+      "blocked_by": [{...}],
+      "blocks": [{...}],
+      "architect_response": "{architect response markdown}"
     }
   ]
 }
 ```
 
-Write this JSON to a temporary file (e.g., `/tmp/tasks-input-{epic_number}.json`).
-
-### 5.3 Run Generation Script
-
-Execute the task file generation script:
+**Step C — Run generation script**:
 
 ```bash
-python .claude/skills/nxs-generate-tasks/scripts/generate_task_files.py /tmp/tasks-input-{epic_number}.json
+python .claude/skills/nxs-generate-tasks/scripts/generate_task_files.py /tmp/task-input-{epic_number}-{seq:02d}.json
 ```
 
-### Expected Response
+**Step D — Confirm and report**: On success, log `✓ TASK-{epic_number}.{seq:02d}.md written`. On failure, report error and stop.
 
-```json
-{
-  "status": "success",
-  "tasks_generated": N,
-  "output_dir": "path/to/tasks",
-  "files": ["TASK-7.01.md", "TASK-7.02.md", ...],
-  "fallbacks_used": N
-}
-```
+Repeat Steps A–D for every task before proceeding to Step 6.
 
 ### Error Handling
 
-- If architect fails for a task, set `architect_response` to `null` (script uses fallbacks)
-- If script returns error, report to user and stop
-- If `fallbacks_used > 0`, warn user that some tasks have placeholder LLD content
+- If `nxs-architect` fails for a task, set `architect_response` to `null` and continue (script uses fallbacks)
+- If the generation script returns an error, report it immediately and stop — do not continue to the next task
+- If `fallbacks_used > 0` in any response, warn the user that those tasks have placeholder LLD content
 
 ## 6. Run Consistency Analysis & Auto-Remediation
 
@@ -302,12 +310,26 @@ Use these metrics in the Review Checkpoint (Step 7).
 
 **MANDATORY STOP** — Wait for user confirmation before creating GitHub issues.
 
-**For fresh runs** (steps 1-6 completed):
-Present summary: {N} tasks generated in `{path}/tasks/`, auto-remediation applied ({X} tasks merged, {Y} terminology fixes), remaining issues ({critical}/{high}/{medium}/{low}), coverage ({X}%). See `task-review.md` for full analysis.
+**For fresh runs** (steps 1-6 completed), present the summary table then the severity indicator:
 
-**For resume mode** (task-review.md provided):
-Present summary: "Resuming from previous session. {N} task files found in `{path}/tasks/`."
-Parse and display metrics from `task-review.md` (remediation stats, remaining issues, coverage).
+| Metric | Value |
+|--------|-------|
+| Tasks generated | {N} |
+| Effort distribution | {count-S} × S (half–full day), {count-M} × M (1–2 days) |
+| HLD component coverage | {X}% |
+| User story coverage | {Y}% |
+| NFR coverage | {Z}% |
+| Auto-remediated | {tasks_merged} tasks merged, {terminology_fixes} terminology fixes |
+| Remaining issues | Critical: {C} · High: {H} · Medium: {M} · Low: {L} |
+
+**For resume mode** (task-review.md provided), present the equivalent table:
+
+| Metric | Value |
+|--------|-------|
+| Task files found | {N} |
+| HLD component coverage | {X}% (from task-review.md) |
+| User story coverage | {Y}% (from task-review.md) |
+| Remaining issues | Critical: {C} · High: {H} · Medium: {M} · Low: {L} |
 
 Display severity indicator:
 
