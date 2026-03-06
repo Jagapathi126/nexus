@@ -225,5 +225,5 @@ Format into measurable criteria:
 
 Generate a complete High Level Design Document following the structure above. The document should enable other engineers to understand the architectural approach and begin detailed implementation planning.
 
-Save the document as `HLD.md` in the same folder as the `epic.md` file.
+Save the document as `HLD.md` in the same folder as the `*epic.md` file.
 If no epic file was provided when invoking this command, save the file in `docs/{epic-name}/` where {epic-name} is derived from the epic title.

@@ -36,13 +36,14 @@ When `task-review.md` is provided as input, the command enters **resume mode** t
 ## Validation
 
 1. **Verify directory structure**:
-    - Parent directory (of `tasks/`) must contain `epic.md` with `link` attribute (GitHub issue number)
+    - Parent directory (of `tasks/`) must contain a file matching `*epic.md` with `link` attribute (GitHub issue number)
     - Parent directory must contain `HLD.md`
     - `tasks/` folder must contain `TASK-*.md` files
     - If any missing, report error and exit with guidance
 
 2. **Extract epic context**:
-    - Parse `epic.md` frontmatter for `link` attribute → extract issue number
+    - Locate the file matching `*epic.md` in the parent directory
+    - Parse its frontmatter for `link` attribute → extract issue number
     - Count existing `TASK-*.md` files in `tasks/` folder
 
 3. **Parse task-review.md for metrics**:
@@ -60,8 +61,8 @@ When `task-review.md` is provided as input, the command enters **resume mode** t
 
 Before analyzing the HLD, ensure a GitHub issue exists for the parent epic:
 
-1. Locate the `epic.md` file in the same directory as the HLD file
-2. Parse the `epic.md` YAML frontmatter and check for a `link` attribute
+1. Locate the file matching `*epic.md` in the same directory as the HLD file
+2. Parse that file's YAML frontmatter and check for a `link` attribute
 
     a. **If `link` exists** (e.g., `link: "#42"`):
     - Extract the issue number from the `link` value
@@ -71,12 +72,12 @@ Before analyzing the HLD, ensure a GitHub issue exists for the parent epic:
     b. **If `link` is missing**:
     - Invoke the `nxs-gh-create-epic` skill:
       ```bash
-      python ./.claude/skills/nxs-gh-create-epic/scripts/nxs_gh_create_epic.py "<path-to-epic.md>"
+      python ./.claude/skills/nxs-gh-create-epic/scripts/nxs_gh_create_epic.py "<path-to-*epic.md>"
       ```
-    - Verify the `epic.md` frontmatter now contains a `link` attribute
+    - Verify the epic file's frontmatter now contains a `link` attribute
     - Extract and store the issue number from the `link` attribute for use in task generation
 
-3. If no `epic.md` exists in the HLD directory, warn the user and proceed without a parent issue.
+3. If no `*epic.md` file exists in the HLD directory, warn the user and proceed without a parent issue.
 
 ## 2. Load & Analyze HLD
 
@@ -95,7 +96,7 @@ After loading the HLD, validate the current epic's scope against sibling epics i
 
 1. **Identify sibling epics** (path scan only — do NOT read any files yet):
     - Determine the parent feature directory (parent of the current epic's directory)
-    - List `*/epic.md` paths in sibling directories (e.g., `01-epic-a/epic.md`, `02-epic-b/epic.md`)
+    - List `*/*epic.md` paths in sibling directories (e.g., `01-epic-a/epic.md`, `02-epic-b/my-epic.md`)
     - **If the list is empty → skip this step entirely and proceed to Step 4**
 
 2. **Load sibling epic context** (only reached if siblings exist):
@@ -188,8 +189,8 @@ Build the shared metadata JSON once and store it in memory (not on disk):
 ```json
 {
   "epic_number": {epic issue number from Step 1},
-  "epic_title": "{epic title from epic.md}",
-  "epic_type": "{enhancement|bug from epic.md}",
+  "epic_title": "{epic title from *epic.md}",
+  "epic_type": "{enhancement|bug from *epic.md}",
   "output_dir": "{HLD directory}/tasks"
 }
 ```
@@ -417,9 +418,9 @@ Group tasks into phases based on the Task Categories defined in Step 4. Only inc
 
 ## 9. Update Epic
 
-After generating `tasks.md`, update the `epic.md` file:
+After generating `tasks.md`, update the `*epic.md` file:
 
-1. Locate or create an `## Implementation Plan` section in `epic.md` immediately after the `## Open Questions` section.
+1. Locate or create an `## Implementation Plan` section in the epic file immediately after the `## Open Questions` section.
 2. Add a relative link to the generated `tasks.md` file:
 
     ```markdown
