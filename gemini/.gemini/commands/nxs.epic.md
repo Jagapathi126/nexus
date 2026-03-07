@@ -144,46 +144,42 @@ Given that capability description, do this:
     - Create a 2-5 word name that captures the essence of the capability
     - Use noun or action-noun format (e.g., "space-scoped-tags", "private-user-tags", "tag-inheritance")
     - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
-    - **Do NOT** add any prefix or suffix — the sequential generator will handle prefixing
+    - **Do NOT** add any prefix or suffix — the issue number will be used as prefix after GitHub issue creation
     - Examples:
         - "Tags should be available to all users in a space" → `space-scoped-tags`
         - "Allow users to have private tags not visible to others" → `private-user-tags`
         - "Implement tag inheritance from parent spaces" → `tag-inheritance`
         - "Add bulk tag operations for administrators" → `bulk-tag-operations`
 
-4. **Create the Epic directory using sequential-name-generator**:
+4. **Create the Epic directory**:
 
-    a. Use the `sequential-name-generator` skill to generate the folder name:
+    a. Use the kebab-case name from step 3 directly as the folder name (no prefix):
 
     ```bash
-    python ./scripts/next_sequential_name.py "<feature-directory>" "<epic-name>"
+    mkdir -p "<feature-directory>/<epic-name>"
     ```
 
     - `<feature-directory>` is the directory containing the Feature's README.md
-    - `<epic-name>` is the kebab-case name generated in step 3 (no extension = folder mode)
+    - `<epic-name>` is the kebab-case name generated in step 3
 
-    b. The script will return a name like `03-space-scoped-tags`
+    b. The epic document will be saved as `epic.md` inside this directory:
+    `<feature-directory>/<epic-name>/epic.md`
 
-    c. Create the epic directory:
-
-    ```bash
-    mkdir -p "<feature-directory>/<sequential-epic-folder>"
-    ```
-
-    d. The epic document will be saved as `epic.md` inside this directory:
-    `<feature-directory>/<sequential-epic-folder>/epic.md`
+    c. After GitHub issue creation (Step 12), the folder will be renamed to
+    `<issue-number>-<epic-name>/` and the file to `<issue-number>-epic.md`.
+    If the user skips issue creation, the folder and file remain unprefixed.
 
 5. **Handle external plan files** (if referenced):
 
     If the user referenced a Claude Code planning mode document or any file outside the repository:
 
     a. **Check for HLD.md in the epic directory**:
-    - If `HLD.md` does NOT exist in `<feature-directory>/<sequential-epic-folder>/`:
-        - Copy the external file to `<feature-directory>/<sequential-epic-folder>/HLD.md`
+    - If `HLD.md` does NOT exist in `<feature-directory>/<epic-name>/`:
+        - Copy the external file to `<feature-directory>/<epic-name>/HLD.md`
         - This becomes the High-Level Design document for reference
 
     b. **If HLD.md already exists**:
-    - Copy the external file to `<feature-directory>/<sequential-epic-folder>/` with its original filename
+    - Copy the external file to `<feature-directory>/<epic-name>/` with its original filename
         - For example: `plan-2026-01-08.md`, `design-notes.md`, etc.
 
     c. **Never link to files outside the repository**:
@@ -458,22 +454,40 @@ estimated_duration: "[X days/weeks - likely case from architect]"
 
 12. **Create GitHub Issues**:
 
-    For each epic document generated, invoke the `nxs-gh-create-epic` skill:
+    For each epic document generated, invoke the `nxs-gh-create-epic` skill and then rename the folder and file:
 
     ```bash
-    python ./.gemini/skills/nxs-gh-create-epic/scripts/nxs_gh_create_epic.py "<path-to-epic.md>"
+    python ./.gemini/skills/nxs-gh-create-epic/scripts/nxs_gh_create_epic.py "<feature-directory>/<epic-name>/epic.md"
     ```
+
+    After the skill runs, extract the issue number and rename:
+
+    ```bash
+    # Extract issue number from updated frontmatter (skill sets link: "#<number>")
+    ISSUE_NUM=$(grep '^link:' "<feature-directory>/<epic-name>/epic.md" | grep -o '[0-9]*')
+
+    # Rename the epic file to <issue-number>-epic.md
+    mv "<feature-directory>/<epic-name>/epic.md" \
+       "<feature-directory>/<epic-name>/${ISSUE_NUM}-epic.md"
+
+    # Rename the folder from <epic-name> to <issue-number>-<epic-name>
+    mv "<feature-directory>/<epic-name>" \
+       "<feature-directory>/${ISSUE_NUM}-<epic-name>"
+    ```
+
+    Final path: `<feature-directory>/<issue-number>-<epic-name>/<issue-number>-epic.md`
+    Example: `docs/features/tagging/42-space-scoped-tags/42-epic.md`
 
     a. **For multiple epics** (Option 2 - right-sizing):
     - Invoke the skill once per epic document, in sequential order
-    - Each invocation creates a separate GitHub issue and updates that epic's frontmatter with `link: "#<issue-number>"`
+    - Perform the rename steps above after each invocation before moving to the next epic
 
     b. **Verify success**:
-    - After each invocation, confirm the `epic.md` frontmatter now contains a `link` attribute
-    - If the skill fails: Report the error to the user and stop. Do not proceed to commit.
+    - After each invocation and rename, confirm the final `<issue-number>-epic.md` exists and its frontmatter contains a `link` attribute
+    - If the skill fails: Report the error to the user and stop. Do not rename or proceed to commit.
 
     c. **Collect results**:
-    - Store the issue number and URL for each epic for the completion report
+    - Store the issue number, URL, and final file path for each epic for the completion report
 
 13. **Commit Epic Files**:
 

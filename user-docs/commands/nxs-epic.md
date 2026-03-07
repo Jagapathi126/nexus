@@ -143,21 +143,21 @@ Creates a concise kebab-case name (2-5 words):
 - "Private user tags" -> `private-user-tags`
 - "Tag inheritance" -> `tag-inheritance`
 
-### Phase 4: Create Sequential Directory
+### Phase 4: Create Epic Directory
 
-Uses `nxs-sq-name-generator` skill to create numbered folder:
+Creates the epic folder using the kebab-case name directly (no number prefix):
 
 ```bash
-python ./scripts/next_sequential_name.py "docs/product/features" "space-scoped-tags"
+mkdir -p "docs/product/features/space-scoped-tags"
 ```
 
-**Output**: `03-space-scoped-tags` (if 01 and 02 already exist)
+After GitHub issue creation, the folder is renamed to `<issue-number>-<epic-name>`:
 
 **Final structure**:
 ```
 docs/product/features/
-└── 03-space-scoped-tags/
-    └── epic.md (generated)
+└── 42-space-scoped-tags/
+    └── 42-epic.md (generated)
 ```
 
 ### Phase 5: Handle External Plan Files

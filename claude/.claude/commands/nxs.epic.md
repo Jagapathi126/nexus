@@ -144,7 +144,7 @@ Given that capability description, do this:
     - Create a 2-5 word name that captures the essence of the capability
     - Use noun or action-noun format (e.g., "space-scoped-tags", "private-user-tags", "tag-inheritance")
     - Preserve technical terms and acronyms (OAuth2, API, JWT, etc.)
-    - **Do NOT** add any prefix or suffix — the sequential generator will handle prefixing
+    - **Do NOT** add any prefix or suffix — the issue number will be used as prefix after GitHub issue creation
     - Examples:
         - "Tags should be available to all users in a space" → `space-scoped-tags`
         - "Allow users to have private tags not visible to others" → `private-user-tags`
@@ -174,12 +174,12 @@ Given that capability description, do this:
     If the user referenced a Claude Code planning mode document or any file outside the repository:
 
     a. **Check for HLD.md in the epic directory**:
-    - If `HLD.md` does NOT exist in `<feature-directory>/<sequential-epic-folder>/`:
-        - Copy the external file to `<feature-directory>/<sequential-epic-folder>/HLD.md`
+    - If `HLD.md` does NOT exist in `<feature-directory>/<epic-name>/`:
+        - Copy the external file to `<feature-directory>/<epic-name>/HLD.md`
         - This becomes the High-Level Design document for reference
 
     b. **If HLD.md already exists**:
-    - Copy the external file to `<feature-directory>/<sequential-epic-folder>/` with its original filename
+    - Copy the external file to `<feature-directory>/<epic-name>/` with its original filename
         - For example: `plan-2026-01-08.md`, `design-notes.md`, etc.
 
     c. **Never link to files outside the repository**:

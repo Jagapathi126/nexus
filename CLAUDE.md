@@ -96,7 +96,6 @@ Facilitate cross-functional decision-making with PM and Architecture perspective
 ### Reusable Skills
 Located in `claude/.claude/skills/`:
 - **`nxs-gh-create-task`** / **`nxs-gh-create-epic`**: GitHub issue creation from frontmatter
-- **`nxs-sq-name-generator`**: Sequential kebab-case directory naming
 - **`nxs-env-sync`**: Environment file syncing to worktrees
 - **`nxs-workspace-setup`**: Automated git workspace setup (worktree creation, branch management, env sync coordination)
 - **`nxs-ship`**: Post-implementation shipping workflow (commit operations, GitHub comment posting, closure eligibility evaluation, worktree cleanup)
