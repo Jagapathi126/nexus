@@ -38,7 +38,7 @@ def _parse_simple_yaml(content: str) -> dict[str, dict[str, str]]:
 def read_delivery_config(project_root: Path) -> dict[str, str]:
     """Read delivery config from config.yml (preferred) or config.json (fallback).
 
-    Returns a normalized dict with keys: docRoot, project, epicType.
+    Returns a normalized dict with keys: docRoot, project, epicType, issuesRepo.
     """
     delivery_dir = project_root / "docs" / "system" / "delivery"
 
@@ -56,6 +56,8 @@ def read_delivery_config(project_root: Path) -> dict[str, str]:
                 result["project"] = github["project"]
             if github.get("epic-type"):
                 result["epicType"] = github["epic-type"]
+            if github.get("issues-repo"):
+                result["issuesRepo"] = github["issues-repo"]
             return result
         except OSError:
             pass
@@ -64,7 +66,12 @@ def read_delivery_config(project_root: Path) -> dict[str, str]:
     if json_path.exists():
         try:
             with open(json_path, encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            # Support nested github object or flat keys
+            if isinstance(data.get("github"), dict):
+                if data["github"].get("issues-repo"):
+                    data["issuesRepo"] = data["github"]["issues-repo"]
+            return data
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -375,17 +382,26 @@ def add_issue_to_project(project_id: str, issue_id: str) -> bool:
         return False
 
 
-def create_github_issue(title: str, labels: list[str], body_file: str) -> str | None:
+def create_github_issue(title: str, labels: list[str], body_file: str, repo: str | None = None) -> str | None:
     """Create a GitHub issue using gh CLI.
-    
+
+    Args:
+        title: Issue title
+        labels: List of label names to apply
+        body_file: Path to file containing the issue body
+        repo: Optional 'owner/repo' to create the issue in (passed as -R). Uses current repo if omitted.
+
     Returns:
         The issue URL if successful, None otherwise.
     """
     cmd = ["gh", "issue", "create", "--title", title, "--body-file", body_file]
-    
+
     for label in labels:
         cmd.extend(["--label", label])
-    
+
+    if repo:
+        cmd.extend(["-R", repo])
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         # gh issue create outputs the issue URL on success
@@ -404,12 +420,13 @@ def extract_issue_number(issue_url: str) -> str | None:
     return None
 
 
-def get_issue_id(issue_ref: str) -> str | None:
+def get_issue_id(issue_ref: str, repo: str | None = None) -> str | None:
     """Get the GitHub GraphQL node ID for an issue.
-    
+
     Args:
         issue_ref: Issue number, #number format, or full URL
-        
+        repo: Optional 'owner/repo' to query (passed as -R flag). Uses current repo if omitted.
+
     Returns:
         The GraphQL node ID (e.g., "I_kwDOABC123") or None if not found.
     """
@@ -421,9 +438,11 @@ def get_issue_id(issue_ref: str) -> str | None:
         match = re.search(r"/issues/(\d+)", issue_ref)
         if match:
             issue_number = match.group(1)
-    
+
     cmd = ["gh", "issue", "view", issue_number, "--json", "id", "--jq", ".id"]
-    
+    if repo:
+        cmd = ["gh", "issue", "view", issue_number, "-R", repo, "--json", "id", "--jq", ".id"]
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         return result.stdout.strip()
@@ -432,14 +451,19 @@ def get_issue_id(issue_ref: str) -> str | None:
         return None
 
 
-def assign_parent_issue(child_issue_number: str, parent_issue_ref: str) -> bool:
+def assign_parent_issue(child_issue_number: str, parent_issue_ref: str, repo: str | None = None) -> bool:
     """Create a sub-issue relationship using GitHub's GraphQL API.
-    
+
     This creates an actual parent-child (sub-issue) relationship, not just a comment.
+
+    Args:
+        child_issue_number: The child issue number
+        parent_issue_ref: The parent issue reference (#number or URL)
+        repo: Optional 'owner/repo' passed as -R when resolving issue IDs.
     """
     # Get GraphQL node IDs for both issues
-    parent_id = get_issue_id(parent_issue_ref)
-    child_id = get_issue_id(child_issue_number)
+    parent_id = get_issue_id(parent_issue_ref, repo=repo)
+    child_id = get_issue_id(child_issue_number, repo=repo)
     
     if not parent_id or not child_id:
         print(f"Error: Could not resolve issue IDs (parent={parent_id}, child={child_id})", file=sys.stderr)
@@ -489,6 +513,14 @@ def read_project_from_config(project_root: Path) -> str:
     return read_delivery_config(project_root).get("project", "")
 
 
+def read_issues_repo_from_config(project_root: Path) -> str:
+    """Read the target issues repository from delivery config (config.yml or config.json).
+
+    Returns the 'owner/repo' string from github.issues-repo, or empty string if not set.
+    """
+    return read_delivery_config(project_root).get("issuesRepo", "")
+
+
 def resolve_project_id(project_attr: str | None, config_project_id: str | None, repo_project_id: str | None) -> str | None:
     """Resolve the project ID to use for an issue.
 
@@ -521,6 +553,7 @@ def process_task_file(
     config_project_id: str | None = None,
     repo_project_id: str | None = None,
     skip_project: bool = False,
+    issues_repo: str | None = None,
 ) -> bool:
     """Process a single TASK file and create a GitHub issue.
 
@@ -529,65 +562,66 @@ def process_task_file(
         config_project_id: Project node ID from config.json (used if frontmatter has no project)
         repo_project_id: Fallback project node ID from repository auto-discovery
         skip_project: If True, skip adding to any project
+        issues_repo: Optional 'owner/repo' to create the issue in (from github.issues-repo config).
 
     Returns:
         True if successful, False otherwise.
     """
     print(f"Processing: {task_file}")
-    
+
     content = task_file.read_text()
     frontmatter, body = parse_frontmatter(content)
-    
+
     title = frontmatter.get("title", "")
     labels = frontmatter.get("labels", [])
     parent = frontmatter.get("parent", "")
     project_attr = frontmatter.get("project", "")
-    
+
     # Ensure labels is a list
     if isinstance(labels, str):
         labels = [labels] if labels else []
-    
+
     if not title:
         print(f"  Warning: No title in frontmatter, using filename", file=sys.stderr)
         title = task_file.stem
-    
+
     # Create temporary file with body content (without frontmatter)
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
         tmp.write(body)
         tmp_path = tmp.name
-    
+
     try:
         # Create the GitHub issue
-        issue_url = create_github_issue(title, labels, tmp_path)
-        
+        issue_url = create_github_issue(title, labels, tmp_path, repo=issues_repo)
+
         if not issue_url:
             print(f"  Failed to create issue for {task_file}", file=sys.stderr)
             return False
-        
+
         print(f"  Created issue: {issue_url}")
-        
+
         issue_number = extract_issue_number(issue_url)
-        
+
         # Add to project unless skipped
         if not skip_project and issue_number:
             project_id = resolve_project_id(project_attr if project_attr else None, config_project_id, repo_project_id)
             if project_id:
-                issue_id = get_issue_id(issue_number)
+                issue_id = get_issue_id(issue_number, repo=issues_repo)
                 if issue_id:
                     if add_issue_to_project(project_id, issue_id):
                         print(f"  Added to project")
                     else:
                         print(f"  Warning: Failed to add issue to project", file=sys.stderr)
-        
+
         # If there's a parent, assign it
         if parent and issue_number:
-            if assign_parent_issue(issue_number, parent):
+            if assign_parent_issue(issue_number, parent, repo=issues_repo):
                 print(f"  Linked as sub-issue of: {parent}")
             else:
                 print(f"  Warning: Failed to create sub-issue relationship", file=sys.stderr)
-        
+
         return True
-        
+
     finally:
         # Clean up temporary file
         os.unlink(tmp_path)
@@ -628,10 +662,16 @@ def main():
     
     print(f"Found {len(task_files)} task file(s)")
     
+    project_root = find_project_root(Path(target_folder))
+
+    # Read issues-repo from config (if set, all gh issue commands target that repo)
+    issues_repo: str | None = read_issues_repo_from_config(project_root) or None
+    if issues_repo:
+        print(f"Issues repo (from config): {issues_repo}")
+
     # Resolve project from config.json (priority between frontmatter and repo auto-discovery)
     config_project_id = None
     if not args.no_project and not args.dry_run:
-        project_root = find_project_root(Path(target_folder))
         config_project = read_project_from_config(project_root)
         if config_project:
             print(f"Looking up project from config: {config_project}")
@@ -661,7 +701,7 @@ def main():
 
     success_count = 0
     for task_file in task_files:
-        if process_task_file(task_file, config_project_id, repo_project_id, skip_project=args.no_project):
+        if process_task_file(task_file, config_project_id, repo_project_id, skip_project=args.no_project, issues_repo=issues_repo):
             success_count += 1
     
     print(f"\nProcessed {success_count}/{len(task_files)} task files successfully")

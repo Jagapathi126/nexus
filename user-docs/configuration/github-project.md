@@ -4,7 +4,16 @@ Nexus can automatically add GitHub issues (epics and tasks) to a GitHub Project 
 
 ## Quick Setup
 
-Add a `project` attribute to your delivery config file at `docs/system/delivery/config.json`:
+Add a `project` attribute to your delivery config file. Nexus looks for `docs/system/delivery/config.yml` first, then falls back to `config.json`.
+
+**`config.yml` (preferred):**
+
+```yaml
+github:
+    project: your-org/1
+```
+
+**`config.json` (legacy):**
 
 ```json
 {
@@ -36,7 +45,7 @@ When creating a GitHub issue, Nexus resolves the target project using a priority
 | Priority | Source | Description |
 |----------|--------|-------------|
 | 1 | `--project` CLI flag | Explicit flag passed to the script |
-| 2 | `config.json` `project` | The `project` attribute in `docs/system/delivery/config.json` |
+| 2 | Delivery config `project` | The `project` attribute in `docs/system/delivery/config.yml` or `config.json` |
 | 3 | Repository auto-discovery | Queries the repository's linked GitHub Projects |
 | 4 | Skip | No project assignment |
 
@@ -45,13 +54,13 @@ When creating a GitHub issue, Nexus resolves the target project using a priority
 | Priority | Source | Description |
 |----------|--------|-------------|
 | 1 | Task frontmatter `project` | The `project` field in the task's YAML frontmatter |
-| 2 | `config.json` `project` | The `project` attribute in `docs/system/delivery/config.json` |
+| 2 | Delivery config `project` | The `project` attribute in `docs/system/delivery/config.yml` or `config.json` |
 | 3 | Repository auto-discovery | Queries the repository's linked GitHub Projects |
 | 4 | Skip | No project assignment |
 
 ### For generated task files (`nxs-generate-tasks`)
 
-When `/nxs.tasks` generates `TASK-*.md` files, it reads the `project` from `config.json` and writes it into each task file's frontmatter `project` field. This means the value is baked into the task files at generation time.
+When `/nxs.tasks` generates `TASK-*.md` files, it reads the `project` from the delivery config and writes it into each task file's frontmatter `project` field. This means the value is baked into the task files at generation time.
 
 ## First-Time Setup
 
@@ -88,6 +97,40 @@ gh auth status
 ```
 
 If you see permission errors when adding issues to projects, re-authenticate with the `project` scope.
+
+## Routing Issues to a Different Repository
+
+By default, Nexus creates GitHub issues in the current repository. Use `github.issues-repo` to route all issues to a separate repository — for example, when your team tracks work in a dedicated issues-only repo.
+
+**`config.yml`:**
+
+```yaml
+github:
+    project: your-org/1
+    issues-repo: your-org/your-issues-repo
+```
+
+**`config.json`:**
+
+```json
+{
+    "github": {
+        "issues-repo": "your-org/your-issues-repo"
+    },
+    "project": "your-org/1"
+}
+```
+
+When `issues-repo` is set:
+
+- All `gh issue create` calls pass `-R your-org/your-issues-repo`
+- Issue ID lookups (`gh issue view`) also target that repository
+- Parent-child (sub-issue) relationships are resolved within the same repository
+- Project assignment and issue type resolution continue to work normally
+
+This setting applies to both `nxs-gh-create-epic` and `nxs-gh-create-task`. The value must be an `owner/repo` string referencing a repository your `gh` authentication can write to.
+
+> **Note:** The GitHub Project board (`project`) and the issues repository (`issues-repo`) are independent. You can mix them freely — for example, hosting issues in `your-org/issues` while adding them to a project owned by `your-org`.
 
 ## Skipping Project Assignment
 
