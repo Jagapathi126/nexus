@@ -218,13 +218,13 @@ Manual review required.
 
 ## Anti-Patterns
 
-1. **Proceed without issue validation** — Validate first, fail fast
-2. **Answer for the user** — Never respond to checkpoints on user's behalf (except YOLO auto-approvals per Common Procedures table)
-3. **Skip skill checkpoints** — Always handle them as documented
-4. **Close with open blockers** — Only close when fully complete
-5. **Skip the GitHub comment** — Always post implementation summary
-6. **Swallow errors** — Surface all failures with context (see Common Procedures)
-7. **Paraphrase user intent** — Pass responses verbatim to agent
-8. **Raw agent output** — Format all checkpoint presentations as `🔄 **CHECKPOINT**`
-9. **Proceed after user cancellation** — Respect and stop
-10. **Auto-approve branch conflicts in YOLO** — Always require user input
+1. **Proceeding without issue number** — Validate first, fail fast
+2. **Answering for the user** — Never respond to agent questions on user's behalf (except YOLO auto-approvals)
+3. **Skipping skill checkpoints** — Always handle checkpoints from skills
+4. **Closing issues with open blockers** — Only close when fully complete
+5. **Skipping the GitHub comment** — Always post implementation summary
+6. **Swallowing errors** — Surface all failures with context
+7. **Paraphrasing user intent** — Pass responses verbatim
+8. **Raw agent output** — Format checkpoints for readability
+9. **Proceeding after cancel** — Respect user cancellation
+10. **Auto-approving branch conflicts in YOLO** — Branch conflicts always require user input
